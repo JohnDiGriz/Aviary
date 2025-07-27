@@ -1,0 +1,89 @@
+﻿<Project DefaultTargets="Build" Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+        <CSDataDir>$([System.IO.Path]::Combine($(CSDir), 'cultistsimulator_Data'))</CSDataDir>
+        <CSModDir>$([System.IO.Path]::Combine($(USERPROFILE), 'AppData\LocalLow\Weather Factory\Cultist Simulator\mods'))</CSModDir>
+    </PropertyGroup>
+
+
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+        <CSDataDir>$([System.IO.Path]::Combine($(CSDir), 'CS_Data'))</CSDataDir>
+        <CSModDir>$([System.IO.Path]::Combine($(HOME), '.config\unity3d\Weather Factory\Cultist Simulator\mods'))</CSModDir>
+
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <CSDataDir>$([System.IO.Path]::Combine($(CSDir), 'OSX.app\Contents\Resources\Data'))</CSDataDir>
+        <CSModDir>$([System.IO.Path]::Combine($(HOME), 'Library\Application Support\Weather Factory\Cultist Simulator\mods'))</CSModDir>
+    </PropertyGroup>
+    <PropertyGroup>
+        <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+        <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>enable</Nullable>
+        <OutputType>Library</OutputType>
+        <AppDesignerFolder>Properties</AppDesignerFolder>
+        <RootNamespace>AviaryModules</RootNamespace>
+        <AssemblyName>Aviary</AssemblyName>
+        <LangVersion>latest</LangVersion>
+        <FileAlignment>512</FileAlignment>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <TargetFrameworkProfile/>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+        <DebugSymbols>true</DebugSymbols>
+        <DebugType>full</DebugType>
+        <Optimize>false</Optimize>
+        <OutDir>$([System.IO.Path]::Combine($(CSModDir), 'Aviary\dll'))</OutDir>
+        <DefineConstants>DEBUG;TRACE</DefineConstants>
+        <ErrorReport>prompt</ErrorReport>
+        <WarningLevel>4</WarningLevel>
+        <Prefer32Bit>false</Prefer32Bit>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+        <DebugType>none</DebugType>
+        <Optimize>true</Optimize>
+        <OutDir>$([System.IO.Path]::Combine($(CSModDir), 'Aviary\dll'))</OutDir>
+        <DefineConstants>TRACE</DefineConstants>
+        <ErrorReport>prompt</ErrorReport>
+        <WarningLevel>4</WarningLevel>
+        <Prefer32Bit>false</Prefer32Bit>
+        <LangVersion>latest</LangVersion>
+    </PropertyGroup>
+    <ItemGroup>
+        <Reference Include="SecretHistories.Main">
+            <HintPath>$([System.IO.Path]::Combine($(CSDataDir), 'Managed\SecretHistories.Main.dll'))</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="SecretHistories.Enums">
+            <HintPath>$([System.IO.Path]::Combine($(CSDataDir), 'Managed\SecretHistories.Enums.dll'))</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine">
+            <HintPath>$([System.IO.Path]::Combine($(CSDataDir), 'Managed\UnityEngine.dll'))</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.CoreModule">
+            <HintPath>$([System.IO.Path]::Combine($(CSDataDir), 'Managed\UnityEngine.CoreModule.dll'))</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <Reference Include="TheRoostMachine">
+            <HintPath>$([System.IO.Path]::Combine($(CSModDir), 'Roost\dll\TheRoostMachine.dll'))</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UI">
+            <HintPath>$([System.IO.Path]::Combine($(CSDataDir), 'Managed\UnityEngine.UI.dll'))</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UIModule">
+            <HintPath>$([System.IO.Path]::Combine($(CSDataDir), 'Managed\UnityEngine.UIModule.dll'))</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+    </ItemGroup>
+    <ItemGroup>
+      <PackageReference Include="Lib.Harmony" Version="2.3.6" />
+    </ItemGroup>
+
+</Project>
