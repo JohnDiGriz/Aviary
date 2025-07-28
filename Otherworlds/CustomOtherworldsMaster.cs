@@ -79,6 +79,8 @@ namespace AviaryModules.Otherworlds
 
         private static GameObject? _otherworldPrefab;
 
+        private static bool _destroyedOldOtherworld;
+
 
         internal static void Enact()
         {
@@ -109,6 +111,8 @@ namespace AviaryModules.Otherworlds
                 original: "EnactConsequences",
                 transpiler: typeof(CustomOtherworldsMaster).GetMethodInvariant(nameof(ConsequencesTranspiler))
             );
+            
+            AtTimeOfPower.CompendiumLoad.Schedule(ReloadOtherworlds, PatchType.Postfix);
         }
 
         // ReSharper disable twice InconsistentNaming
@@ -127,6 +131,33 @@ namespace AviaryModules.Otherworlds
             return instructions.ReplaceSegment(
                 code => code.Calls(typeof(FucinePathPart).GetMethodInvariant(nameof(FucinePathPart.TrimSpherePrefix))),
                 code => code.opcode == OpCodes.Endfinally, keyCodes, false, true);
+        }
+
+        private static void ReloadOtherworlds(Compendium compendiumToPopulate)
+        {
+            if(!_destroyedOldOtherworld)
+                return;
+            var idsToRemove = new int[_otherworlds!.Count];
+            var removeCount = 0;
+            for(var i =0; i < _otherworlds.Count; i++) {
+                var otherworldComponent = _otherworlds[i];
+                if (compendiumToPopulate.GetEntityById<CustomOtherworld>(otherworldComponent.EntityId) is { } otherworld)
+                {
+                    otherworldComponent.UpdateFromSpec(otherworld);
+                }
+                else
+                {
+                    RegisteredOtherworlds.Remove(otherworldComponent.EntityId);
+                    otherworldComponent.ActualRetire();
+                    Object.Destroy(otherworldComponent.gameObject);
+                    idsToRemove[removeCount++] = i;
+                }
+            }
+
+            for (var i = removeCount-1; i >= 0; i--)
+            {
+                _otherworlds.RemoveAt(idsToRemove[i]);
+            }
         }
 
         public static void DealCardsFromGrandEffects(string targetSphere, Recipe recipe, string otherworldId,
@@ -254,6 +285,7 @@ namespace AviaryModules.Otherworlds
                 .GetComponent<PermanentSphereSpec>());
             _otherworldPrefab = vanillaMansus.transform.CreatePseudoPrefab();
             Birdsong.TweetQuiet("Created otherworld template.");
+            _destroyedOldOtherworld = true;
         }
 
         public static bool SetExpressionValues(Ingress ingress)
@@ -319,6 +351,166 @@ namespace AviaryModules.Otherworlds
 
             ___otherworldSpecificEnRouteSphere.SetContainer(__instance);
             return false;
+        }
+
+        private static void UpdateFromSpec(this Otherworld otherworld, CustomOtherworld spec)
+        {
+            if (_otherworldPrefab == null || _numa == null)
+                throw Birdsong.Cack("Trying to create an otherworld before destroying vanilla one");
+            otherworld.GetComponent<Image>().SetLocalizedUISprite(Watchman.Get<Config>().GetCurrentCulture().Id,
+                spec.Image);
+            if (OtherworldDominionsField.Get(otherworld) is not { } dominions)
+            {
+                dominions = [];
+                OtherworldDominionsField.Set(otherworld, dominions);
+            }
+            Birdsong.TweetQuiet($"Created core {spec.Id}. Creating egresses.");
+            var instantiatedIndices = new bool[spec.Egresses!.Count];
+            var egressList = Egresses[spec.Id];
+            var indicesToRemove = new int[egressList.Count];
+            var removeCount = 0;
+            for (var i = 0; i < egressList.Count; i++)
+            {
+                var dominion = egressList[i];
+                if (spec.Egresses?.FindIndex(e => e.Id == dominion.egress.Identifier) is { } egressIndex)
+                {
+                    dominion.egress.UpdateFromSpec(spec.Id, spec.Egresses[egressIndex]);
+                    egressList[i] = (dominion.egress, spec.Egresses[egressIndex]);
+                    instantiatedIndices[egressIndex] = true;
+                }
+                else
+                {
+                    dominion.egress.RetireFrom(otherworld);
+                    indicesToRemove[removeCount++] = i;
+                    Object.Destroy(dominion.egress.gameObject);
+                }
+            }
+
+            for (var i = removeCount - 1; i >= 0; i--)
+            {
+                egressList.RemoveAt(indicesToRemove[i]);
+            }
+
+            for (var i = 0; i < spec.Egresses!.Count; i++)
+                if (!instantiatedIndices[i])
+                    dominions.Add(CreateOtherworldDominionFromSpec(spec.Id, spec.Egresses[i], otherworld.transform));
+            
+            if (OtherworldEnRouteField(otherworld) is { } enRouteSphere)
+                enRouteSphere.transform.SetAsLastSibling();
+            else
+                Birdsong.TweetLoud($"Missing enroute sphere in the otherworld {spec.Id}.");
+        }
+
+        private static void ActualRetire(this Otherworld otherworld)
+        {
+            otherworld.gameObject.SetActive(false);
+            otherworld.transform.SetParent(null);
+            if (OtherworldDominionsField.Get(otherworld) is { } dominions)
+                for (var i = 0; i < dominions.Count; i++)
+                {
+                    dominions[i].RetireFrom(otherworld);
+                    Object.Destroy(dominions[i].gameObject);
+                }
+
+            if (OtherworldEnRouteField(otherworld) is { } enRouteSphere)
+                Watchman.Get<HornedAxe>().DeregisterSphere(enRouteSphere);
+            Egresses.Remove(otherworld.Id);
+        }
+
+        private static void UpdateFromSpec(this OtherworldDominion dominion, string otherworldId, Egress spec)
+        {
+            dominion.transform.position = new Vector3(spec.Position.x, spec.Position.y, 0);
+            OtherworldDominionAlwaysVisibleField(dominion, spec.AlwaysVisible.value);
+            if (OtherworldDominionSpheresField(dominion) is not { } locations)
+            {
+                throw Birdsong.Cack("Failed to get dominion's spheres.");
+            }
+            dominion.EgressSphere.doorColor.SetUISprite(spec.Background!, spec.BackgroundColor);
+            dominion.EgressSphere.slotGlow.GetComponent<Image>().SetUISprite(spec.Hover!,
+                spec.HoverColor);
+            dominion.EgressSphere.defaultBackgroundColor = spec.BackgroundColor;
+            dominion.EgressSphere.transform.Find("Icon").GetComponent<Image>().SetUISprite(spec.Icon);
+            if (!EgressLocations.TryGetValue((otherworldId, spec.Id), out var locationList))
+            {
+                locationList = [];
+                EgressLocations.Add((otherworldId, spec.Id), locationList);
+            }
+            var instantiatedIndices = new bool[spec.Locations.Count];
+            var indicesToRemove = new int[locationList.Count];
+            var removeCount = 0;
+            for (var i = 0; i < locationList.Count; i++)
+            {
+                var location = locationList[i];
+                if (spec.Locations?.FindIndex(e => e.Id == location.spec.Id) is { } locationIndex)
+                {
+                    location.location.UpdateFromSpec( 
+                        EgressSituations[(otherworldId, spec.Locations[i].Id)].Storage!, spec.Locations[locationIndex]);
+                    locationList[i] = (location.location, spec.Locations[locationIndex]);
+                    instantiatedIndices[locationIndex] = true;
+                }
+                else
+                {
+                    location.location.RetireFrom(otherworldId);
+                    indicesToRemove[removeCount++] = i;
+                    Object.Destroy(location.location.gameObject);
+                }
+            }
+
+            for (var i = removeCount - 1; i >= 0; i--)
+            {
+                locationList.RemoveAt(indicesToRemove[i]);
+            }
+            
+            for (var i = 0; i < spec.Locations!.Count; i++)
+            {
+                if (instantiatedIndices[i]) continue;
+                var locationResult =
+                    CreateEgressLocationFromSpec(spec.Id, spec.Locations[i], dominion.transform);
+                locations.Add(locationResult.output);
+                EgressSituations[(otherworldId, spec.Locations[i].Id)] = new EgressPseudoSituation(otherworldId,
+                    locationResult.storage,
+                    locationResult.output, SituationSpheresField);
+
+                locationList.Add((locationResult.output, spec.Locations[i]));
+            }
+        }
+
+        private static void RetireFrom(this OtherworldDominion dominion, Otherworld otherworld)
+        {
+            dominion.gameObject.SetActive(false);
+            dominion.transform.SetParent(null);
+            Watchman.Get<HornedAxe>().DeregisterSphere(dominion.EgressSphere);
+            if (OtherworldDominionSpheresField(dominion) is  { } locations)
+            {
+                for(var i = 0;i<locations.Count;i++)
+                    if (locations[i] is OutputSphere location)
+                    {
+                        location.RetireFrom(otherworld.EntityId);
+                        Object.Destroy(location.gameObject);
+                    }
+            }
+
+            EgressLocations.Remove((otherworld.EntityId, dominion.Identifier));
+        }
+
+        private static void UpdateFromSpec(this OutputSphere location, EgressStorageSphere storage, EgressLocation spec)
+        {
+            location.transform.position = new Vector3(spec.Position.x, spec.Position.y);
+            location.AlwaysShroudIncomingTokens = spec.Shrouded.value;
+            storage.transform.position = new Vector3(spec.Position.x, spec.Position.y);
+        }
+
+        private static void RetireFrom(this OutputSphere location, string otherworldId)
+        {
+            location.gameObject.SetActive(false);
+            location.transform.SetParent(null);
+            Watchman.Get<HornedAxe>().DeregisterSphere(location);
+            var egressSituation = EgressSituations[(otherworldId, location.Id)];
+            egressSituation.Storage!.gameObject.SetActive(false);
+            egressSituation.Storage.transform.SetParent(null);
+            Watchman.Get<HornedAxe>().DeregisterSphere(egressSituation.Storage);
+            Object.Destroy(egressSituation.Storage.gameObject);
+            EgressSituations.Remove((otherworldId, location.Id));
         }
 
         private static Otherworld CreateOtherworldFromSpec(CustomOtherworld spec)

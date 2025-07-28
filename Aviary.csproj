@@ -56,6 +56,7 @@
     <Target Name="CopyModData" AfterTargets="Build">
         <Copy SourceFiles="@(StaticFiles)" DestinationFolder="$(OutDir)/../%(RecursiveDir)"/>
     </Target>
+    
     <ItemGroup>
         <Reference Include="SecretHistories.Main">
             <HintPath>$([System.IO.Path]::Combine($(CSDataDir), 'Managed\SecretHistories.Main.dll'))</HintPath>
